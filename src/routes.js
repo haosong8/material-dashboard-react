@@ -37,81 +37,48 @@ Coded by www.creative-tim.com
 
 // Material Dashboard 2 React layouts
 import Dashboard from "layouts/dashboard";
-import Tables from "layouts/tables";
-import Billing from "layouts/billing";
-import RTL from "layouts/rtl";
-import Notifications from "layouts/notifications";
-import Profile from "layouts/profile";
-import SignIn from "layouts/authentication/sign-in";
-import SignUp from "layouts/authentication/sign-up";
+import Printers from "pages/Printers";
+import PrintJobs from "pages/PrintJobs";
+import Maintenance from "pages/Maintenance";
 
 // @mui icons
-import Icon from "@mui/material/Icon";
+import PrintIcon from "@mui/icons-material/Print";
+import DashboardIcon from "@mui/icons-material/Dashboard";
+import ScheduleIcon from "@mui/icons-material/Schedule";
+import HardwareIcon from "@mui/icons-material/Hardware";
 
 const routes = [
   {
     type: "collapse",
     name: "Dashboard",
     key: "dashboard",
-    icon: <Icon fontSize="small">dashboard</Icon>,
+    icon: <DashboardIcon />,
     route: "/dashboard",
     component: <Dashboard />,
   },
   {
     type: "collapse",
-    name: "Tables",
-    key: "tables",
-    icon: <Icon fontSize="small">table_view</Icon>,
-    route: "/tables",
-    component: <Tables />,
+    name: "Printers",
+    key: "printers",
+    icon: <PrintIcon />,
+    route: "/printers",
+    component: <Printers />,
   },
   {
     type: "collapse",
-    name: "Billing",
-    key: "billing",
-    icon: <Icon fontSize="small">receipt_long</Icon>,
-    route: "/billing",
-    component: <Billing />,
+    name: "Print Jobs",
+    key: "print-jobs",
+    icon: <ScheduleIcon />,
+    route: "/print-jobs",
+    component: <PrintJobs />,
   },
   {
     type: "collapse",
-    name: "RTL",
-    key: "rtl",
-    icon: <Icon fontSize="small">format_textdirection_r_to_l</Icon>,
-    route: "/rtl",
-    component: <RTL />,
-  },
-  {
-    type: "collapse",
-    name: "Notifications",
-    key: "notifications",
-    icon: <Icon fontSize="small">notifications</Icon>,
-    route: "/notifications",
-    component: <Notifications />,
-  },
-  {
-    type: "collapse",
-    name: "Profile",
-    key: "profile",
-    icon: <Icon fontSize="small">person</Icon>,
-    route: "/profile",
-    component: <Profile />,
-  },
-  {
-    type: "collapse",
-    name: "Sign In",
-    key: "sign-in",
-    icon: <Icon fontSize="small">login</Icon>,
-    route: "/authentication/sign-in",
-    component: <SignIn />,
-  },
-  {
-    type: "collapse",
-    name: "Sign Up",
-    key: "sign-up",
-    icon: <Icon fontSize="small">assignment</Icon>,
-    route: "/authentication/sign-up",
-    component: <SignUp />,
+    name: "Maintenance",
+    key: "maintenance",
+    icon: <HardwareIcon />,
+    route: "/maintenance",
+    component: <Maintenance />,
   },
 ];
 
