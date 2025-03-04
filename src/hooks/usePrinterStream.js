@@ -4,8 +4,10 @@ import { useEffect } from "react";
 const usePrinterStream = (printerIp, onData, active = true) => {
   useEffect(() => {
     if (!active) return;
-    // Connect to the backend proxy endpoint.
-    const eventSource = new EventSource(`http://localhost:5000/printers/proxy/${printerIp}`);
+
+    const eventSource = new EventSource(
+      `http://localhost:5000/printers/connect/stream/${printerIp}`
+    );
     eventSource.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);

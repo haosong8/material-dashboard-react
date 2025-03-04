@@ -1,3 +1,4 @@
+// src/components/PrinterCard.jsx
 import React, { useState } from "react";
 import PropTypes from "prop-types";
 import Card from "@mui/material/Card";
@@ -27,7 +28,7 @@ const PrinterCard = ({ printer }) => {
 
   // Local state for connection status.
   const [localStatus, setLocalStatus] = useState(status);
-  // Local state for dynamic data from SSE.
+  // Local state for dynamic data.
   const [dynamicData, setDynamicData] = useState({
     progress,
     finish,
@@ -51,12 +52,26 @@ const PrinterCard = ({ printer }) => {
       });
   };
 
-  // Use the custom hook to listen to the SSE stream when connected.
-  // We use the printer's IP address as the stream key.
+  // Use the custom SSE polling hook.
+  // Here, we use the printer's IP address as the stream key.
   usePrinterStream(
     ip_address,
     (data) => {
-      setDynamicData((prevData) => ({ ...prevData, ...data }));
+      console.log("Received SSE data:", data);
+      // Check if the response contains a "result" with a "status" object.
+      if (data && data.result && data.result.status) {
+        const statusData = data.result.status;
+        setDynamicData((prevData) => ({
+          ...prevData,
+          extruder: statusData.extruder
+            ? `${statusData.extruder.temperature}°C`
+            : prevData.extruder,
+          heaterBed: statusData.heater_bed
+            ? `${statusData.heater_bed.temperature}°C`
+            : prevData.heaterBed,
+        }));
+      }
+      // If a top-level status is provided, update connection status.
       if (data.status) {
         setLocalStatus(data.status);
       }
@@ -105,15 +120,15 @@ const PrinterCard = ({ printer }) => {
                 <strong>Status:</strong> {localStatus}
               </MDTypography>
               <MDTypography variant="body2">
-                <strong>Progress:</strong> {dynamicData.progress}
+                <strong>Progress:</strong>
               </MDTypography>
               <MDTypography variant="body2">
-                <strong>Queued:</strong> {dynamicData.queued}
+                <strong>Queued:</strong>
               </MDTypography>
             </Grid>
             <Grid item xs={6}>
               <MDTypography variant="body2">
-                <strong>Finish:</strong> {dynamicData.finish}
+                <strong>Finish:</strong>
               </MDTypography>
               <MDTypography variant="body2">
                 <strong>Extruder:</strong> {dynamicData.extruder}
