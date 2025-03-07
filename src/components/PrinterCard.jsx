@@ -8,8 +8,14 @@ import Grid from "@mui/material/Grid";
 import MDBox from "components/MDBox";
 import MDTypography from "components/MDTypography";
 import MDButton from "components/MDButton";
-import { connectPrinter } from "api/printer";
+import { connectPrinter } from "api/printer"; // Assumes connectPrinter makes a POST to /printers/connect
 import usePrinterStream from "hooks/usePrinterStream";
+
+// Helper function to capitalize the first letter.
+const capitalizeStatus = (status) => {
+  if (!status || typeof status !== "string") return status;
+  return status.charAt(0).toUpperCase() + status.slice(1);
+};
 
 const PrinterCard = ({ printer }) => {
   const {
@@ -44,21 +50,25 @@ const PrinterCard = ({ printer }) => {
   const handleConnect = () => {
     connectPrinter(ip_address)
       .then((data) => {
-        console.log("Connected successfully: ", data);
-        setLocalStatus("Connected");
+        console.log("Connected successfully:", data);
+        // Update status based on backend response; assume backend returns printer.status
+        setLocalStatus(data.printer.status || "Connected");
       })
       .catch((err) => {
-        console.error("Error connecting to printer: ", err);
+        console.error("Error connecting to printer:", err);
       });
   };
 
-  // Use the custom SSE polling hook.
-  // Here, we use the printer's IP address as the stream key.
+  // Determine whether to start listening via SSE.
+  // In this case, if the status is anything other than "idle" (ignoring case), we activate SSE.
+  const activateSSE = localStatus && localStatus.toLowerCase() !== "disconnected";
+
+  // Listen for real-time updates via the SSE endpoint once activated.
   usePrinterStream(
     ip_address,
     (data) => {
       console.log("Received SSE data:", data);
-      // Check if the response contains a "result" with a "status" object.
+      // Check if the response contains a result with a status object.
       if (data && data.result && data.result.status) {
         const statusData = data.result.status;
         setDynamicData((prevData) => ({
@@ -76,7 +86,7 @@ const PrinterCard = ({ printer }) => {
         setLocalStatus(data.status);
       }
     },
-    localStatus === "Connected"
+    activateSSE
   );
 
   return (
@@ -92,7 +102,7 @@ const PrinterCard = ({ printer }) => {
           sx={{
             position: "relative",
             width: "100%",
-            paddingTop: "56.25%", // 16:9 Aspect Ratio
+            paddingTop: "56.25%", // 16:9 Aspect Ratio (adjust if needed)
             mb: 3,
           }}
         >
@@ -117,18 +127,18 @@ const PrinterCard = ({ printer }) => {
           <Grid container spacing={1}>
             <Grid item xs={6}>
               <MDTypography variant="body2">
-                <strong>Status:</strong> {localStatus}
+                <strong>Status:</strong> {capitalizeStatus(localStatus)}
               </MDTypography>
               <MDTypography variant="body2">
-                <strong>Progress:</strong>
+                <strong>Progress:</strong> {dynamicData.progress}
               </MDTypography>
               <MDTypography variant="body2">
-                <strong>Queued:</strong>
+                <strong>Queued:</strong> {dynamicData.queued}
               </MDTypography>
             </Grid>
             <Grid item xs={6}>
               <MDTypography variant="body2">
-                <strong>Finish:</strong>
+                <strong>Finish:</strong> {dynamicData.finish}
               </MDTypography>
               <MDTypography variant="body2">
                 <strong>Extruder:</strong> {dynamicData.extruder}
