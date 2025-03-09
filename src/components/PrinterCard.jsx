@@ -1,5 +1,5 @@
 // src/components/PrinterCard.jsx
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import PropTypes from "prop-types";
 import Card from "@mui/material/Card";
 import CardContent from "@mui/material/CardContent";
@@ -8,13 +8,19 @@ import Grid from "@mui/material/Grid";
 import MDBox from "components/MDBox";
 import MDTypography from "components/MDTypography";
 import MDButton from "components/MDButton";
-import { connectPrinter } from "api/printer"; // Assumes connectPrinter makes a POST to /printers/connect
-import usePrinterStream from "hooks/usePrinterStream";
+import { connectPrinter } from "api/printer"; // POST to /printers/connect
+import usePrinterSocket from "hooks/usePrinterSocket";
 
 // Helper function to capitalize the first letter.
-const capitalizeStatus = (status) => {
-  if (!status || typeof status !== "string") return status;
-  return status.charAt(0).toUpperCase() + status.slice(1);
+const capitalizeStatus = (status) =>
+  status && typeof status === "string" ? status.charAt(0).toUpperCase() + status.slice(1) : status;
+
+// Helper function to format seconds as HH:MM:SS.
+const formatSecondsToHHMMSS = (totalSeconds) => {
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = Math.floor(totalSeconds % 60);
+  return `${hours}:${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
 };
 
 const PrinterCard = ({ printer }) => {
@@ -32,9 +38,8 @@ const PrinterCard = ({ printer }) => {
     heaterBed = "N/A",
   } = printer;
 
-  // Local state for connection status.
+  // Local state for connection status, dynamic data, and ETA.
   const [localStatus, setLocalStatus] = useState(status);
-  // Local state for dynamic data.
   const [dynamicData, setDynamicData] = useState({
     progress,
     finish,
@@ -42,67 +47,115 @@ const PrinterCard = ({ printer }) => {
     extruder,
     heaterBed,
   });
+  const [eta, setEta] = useState(null);
 
-  // Construct the webcam URL.
+  // Update local status when printer prop changes.
+  useEffect(() => {
+    setLocalStatus(printer.status);
+  }, [printer.status]);
+
   const webcamUrl = `http://${ip_address}/webcam/?action=stream`;
 
-  // Handler to connect the printer.
   const handleConnect = () => {
     connectPrinter(ip_address)
       .then((data) => {
-        console.log("Connected successfully:", data);
-        // Update status based on backend response; assume backend returns printer.status
-        setLocalStatus(data.printer.status || "Connected");
+        const newStatus = data.printer.status || "Connected";
+        setLocalStatus(newStatus);
+        if (data.initial_state && data.initial_state.result && data.initial_state.result.status) {
+          const statusData = data.initial_state.result.status;
+          const extruderTemp =
+            statusData.extruder && statusData.extruder.temperature !== undefined
+              ? `${statusData.extruder.temperature}°C`
+              : dynamicData.extruder;
+          const heaterBedTemp =
+            statusData.heater_bed && statusData.heater_bed.temperature !== undefined
+              ? `${statusData.heater_bed.temperature}°C`
+              : dynamicData.heaterBed;
+          setDynamicData((prevData) => ({
+            ...prevData,
+            extruder: extruderTemp,
+            heaterBed: heaterBedTemp,
+          }));
+
+          // If toolhead info is provided and printer is printing, calculate ETA.
+          if (
+            statusData.toolhead &&
+            statusData.toolhead.estimated_print_time &&
+            statusData.toolhead.print_time !== undefined &&
+            statusData.print_stats.state === "printing"
+          ) {
+            const est = statusData.toolhead.estimated_print_time;
+            const current = statusData.toolhead.print_time;
+            const remaining = Math.max(0, est - current);
+            setEta(formatSecondsToHHMMSS(remaining));
+          }
+        }
       })
       .catch((err) => {
         console.error("Error connecting to printer:", err);
       });
   };
 
-  // Determine whether to start listening via SSE.
-  // In this case, if the status is anything other than "idle" (ignoring case), we activate SSE.
-  const activateSSE = localStatus && localStatus.toLowerCase() !== "disconnected";
-
-  // Listen for real-time updates via the SSE endpoint once activated.
-  usePrinterStream(
-    ip_address,
-    (data) => {
-      console.log("Received SSE data:", data);
-      // Check if the response contains a result with a status object.
-      if (data && data.result && data.result.status) {
-        const statusData = data.result.status;
-        setDynamicData((prevData) => ({
-          ...prevData,
-          extruder: statusData.extruder
+  // Memoize the socket onData callback.
+  const handleSocketData = useCallback((data) => {
+    if (data && data.result && data.result.status) {
+      const statusData = data.result.status;
+      setDynamicData((prevData) => ({
+        ...prevData,
+        extruder:
+          statusData.extruder && statusData.extruder.temperature !== undefined
             ? `${statusData.extruder.temperature}°C`
             : prevData.extruder,
-          heaterBed: statusData.heater_bed
+        heaterBed:
+          statusData.heater_bed && statusData.heater_bed.temperature !== undefined
             ? `${statusData.heater_bed.temperature}°C`
             : prevData.heaterBed,
+      }));
+      if (statusData.print_stats && typeof statusData.print_stats.state === "string") {
+        setLocalStatus(statusData.print_stats.state);
+      }
+      // Update progress from display_status if printing.
+      if (
+        statusData.print_stats &&
+        statusData.print_stats.state === "printing" &&
+        statusData.display_status &&
+        typeof statusData.display_status.progress !== "undefined"
+      ) {
+        setDynamicData((prevData) => ({
+          ...prevData,
+          progress: statusData.display_status.progress,
         }));
       }
-      // If a top-level status is provided, update connection status.
-      if (data.status) {
-        setLocalStatus(data.status);
+      // Calculate ETA if toolhead info is available and printing.
+      if (
+        statusData.toolhead &&
+        statusData.toolhead.estimated_print_time &&
+        statusData.print_stats.print_duration !== undefined &&
+        statusData.print_stats.state === "printing"
+      ) {
+        const est = statusData.toolhead.estimated_print_time;
+        const current = statusData.print_stats.print_duration;
+        const remaining = Math.max(0, est - current);
+        setEta(formatSecondsToHHMMSS(remaining));
       }
-    },
-    activateSSE
-  );
+    }
+  }, []);
+
+  // Activate the Socket.IO connection if the printer is not "disconnected".
+  const activateSocket = localStatus && localStatus.toLowerCase() !== "disconnected";
+  usePrinterSocket(ip_address, handleSocketData, activateSocket);
 
   return (
     <Card sx={{ maxWidth: 500, m: 2 }}>
       <CardContent>
-        {/* Printer Name (centered) */}
         <MDTypography variant="h5" fontWeight="bold" align="center" mt={1} mb={1}>
           {printer_name}
         </MDTypography>
-
-        {/* Responsive Webcam Container */}
         <MDBox
           sx={{
             position: "relative",
             width: "100%",
-            paddingTop: "56.25%", // 16:9 Aspect Ratio (adjust if needed)
+            paddingTop: "56.25%",
             mb: 3,
           }}
         >
@@ -121,25 +174,27 @@ const PrinterCard = ({ printer }) => {
             }}
           />
         </MDBox>
-
-        {/* Dynamic Data Grid including Status */}
         <MDBox mt={2} mb={2}>
           <Grid container spacing={1}>
             <Grid item xs={6}>
               <MDTypography variant="body2">
                 <strong>Status:</strong> {capitalizeStatus(localStatus)}
               </MDTypography>
-              <MDTypography variant="body2">
-                <strong>Progress:</strong> {dynamicData.progress}
-              </MDTypography>
+              {localStatus.toLowerCase() === "printing" && (
+                <MDTypography variant="body2">
+                  <strong>Progress:</strong> {dynamicData.progress}
+                </MDTypography>
+              )}
               <MDTypography variant="body2">
                 <strong>Queued:</strong> {dynamicData.queued}
               </MDTypography>
             </Grid>
             <Grid item xs={6}>
-              <MDTypography variant="body2">
-                <strong>Finish:</strong> {dynamicData.finish}
-              </MDTypography>
+              {eta && (
+                <MDTypography variant="body2">
+                  <strong>ETA:</strong> {eta}
+                </MDTypography>
+              )}
               <MDTypography variant="body2">
                 <strong>Extruder:</strong> {dynamicData.extruder}
               </MDTypography>
@@ -149,8 +204,6 @@ const PrinterCard = ({ printer }) => {
             </Grid>
           </Grid>
         </MDBox>
-
-        {/* Action Buttons */}
         <Grid container spacing={3} justifyContent="space-between">
           <Grid item>
             <MDButton variant="contained" color="info" onClick={handleConnect}>

@@ -15,9 +15,9 @@ import {
 } from "@mui/material";
 import MDBox from "components/MDBox";
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
+import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import PrinterCard from "components/PrinterCard";
-import { fetchPrinters } from "api/printer";
-import { connectPrinter } from "api/printer";
+import { fetchPrinters, connectPrinter } from "api/printer";
 
 const Printers = () => {
   const [printers, setPrinters] = useState([]);
@@ -39,18 +39,17 @@ const Printers = () => {
   }, []);
 
   // Handler for "Connect All" button.
-  const handleConnectAll = () => {
-    // Iterate over printers and call connectPrinter for each.
-    printers.forEach((printer) => {
-      connectPrinter(printer.ip_address)
-        .then((data) => {
-          console.log(`Printer ${printer.printer_id} connected:`, data);
-          // Optionally update state here if needed. The socket should update dynamic fields.
-        })
-        .catch((err) => {
-          console.error(`Error connecting printer ${printer.printer_id}:`, err);
-        });
-    });
+  const handleConnectAll = async () => {
+    try {
+      // Initiate connection for each printer concurrently.
+      await Promise.all(printers.map((printer) => connectPrinter(printer.ip_address)));
+      // Re-fetch printers to update their statuses from the API.
+      const updatedPrinters = await fetchPrinters();
+      // Force re-render by setting a new array instance.
+      setPrinters([...updatedPrinters]);
+    } catch (error) {
+      console.error("Error connecting all printers:", error);
+    }
   };
 
   const handleViewChange = (event, nextView) => {
@@ -81,6 +80,7 @@ const Printers = () => {
 
   return (
     <DashboardLayout>
+      <DashboardNavbar />
       <MDBox py={3}>
         {/* Connect All Button */}
         <MDBox display="flex" justifyContent="center" mb={2}>
@@ -106,7 +106,7 @@ const Printers = () => {
         {viewMode === "grid" ? (
           <Grid container spacing={3}>
             {printers.map((printer, index) => (
-              <Grid item xs={12} sm={6} md={4} key={printer.printer_id || index}>
+              <Grid item xs={12} sm={6} md={4} key={`${printer.printer_id}-${printer.status}`}>
                 <PrinterCard printer={printer} />
               </Grid>
             ))}
@@ -124,7 +124,7 @@ const Printers = () => {
               </TableHead>
               <TableBody>
                 {printers.map((printer, index) => (
-                  <TableRow key={printer.printer_id || index}>
+                  <TableRow key={`${printer.printer_id}-${printer.status}`}>
                     <TableCell>{printer.printer_name || "N/A"}</TableCell>
                     <TableCell>{printer.printer_model || "N/A"}</TableCell>
                     <TableCell>{printer.status || "Unknown"}</TableCell>
