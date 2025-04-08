@@ -40,6 +40,7 @@ import Dashboard from "layouts/dashboard";
 import Printers from "pages/Printers";
 import PrintJobs from "pages/PrintJobs";
 import Maintenance from "pages/Maintenance";
+import PrinterDetails from "pages/PrinterDetails";
 
 // @mui icons
 import PrintIcon from "@mui/icons-material/Print";
@@ -79,6 +80,11 @@ const routes = [
     icon: <HardwareIcon />,
     route: "/maintenance",
     component: <Maintenance />,
+  },
+  {
+    type: "collapse",
+    route: "/printers/:ipAddress/details",
+    component: <PrinterDetails />,
   },
 ];
 

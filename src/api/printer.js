@@ -3,7 +3,6 @@ import API_BASE_URL from "./config";
 
 export const fetchPrinters = async () => {
   const response = await fetch(`${API_BASE_URL}/printers/`);
-  console.log(response);
   if (!response.ok) {
     throw new Error("Failed to fetch printers");
   }
@@ -23,5 +22,13 @@ export async function connectPrinter(ipAddress) {
     throw new Error("Failed to connect printer");
   }
 
+  return response.json();
+}
+
+export async function getPrinterbyIP(ipAddress) {
+  const response = await fetch(`${API_BASE_URL}/printers/${ipAddress}/details`);
+  if (!response.ok) {
+    throw new Error("Failed to fetch printers");
+  }
   return response.json();
 }
