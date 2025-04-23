@@ -6,7 +6,7 @@ import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 
-function PrintJobs() {
+function PrintSchedule() {
   return (
     <DashboardLayout>
       <DashboardNavbar />
@@ -24,4 +24,4 @@ function PrintJobs() {
   );
 }
 
-export default PrintJobs;
+export default PrintSchedule;

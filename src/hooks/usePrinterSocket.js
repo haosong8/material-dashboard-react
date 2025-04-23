@@ -1,6 +1,7 @@
 // src/hooks/usePrinterSocket.js
 import { useEffect } from "react";
 import io from "socket.io-client";
+import API_BASE_URL from "api/config";
 
 // Global cache: a dictionary mapping printer IP to a Socket.IO instance.
 const socketCache = {};
@@ -18,7 +19,7 @@ const usePrinterSocket = (printerIp, onData, active = true) => {
     }
 
     // Otherwise, create a new Socket.IO connection.
-    const newSocket = io("http://localhost:5000", {
+    const newSocket = io(API_BASE_URL, {
       transports: ["websocket"],
       query: { printerIp },
     });

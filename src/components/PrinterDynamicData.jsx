@@ -10,91 +10,160 @@ const PrinterDynamicData = ({ ipAddress, initialStatus, initialDynamicData, chil
   const [dynamicData, setDynamicData] = useState(initialDynamicData);
   const [eta, setEta] = useState(null);
 
-  // Update local status if initialStatus changes.
+  // Keep status in sync
   useEffect(() => {
     setLocalStatus(initialStatus);
   }, [initialStatus]);
 
-  // Socket update handler.
-  const handleSocketData = useCallback((data) => {
-    if (data && data.result && data.result.status) {
-      const statusData = data.result.status;
-      setDynamicData((prevData) => ({
-        ...prevData,
-        extruder:
-          statusData.extruder && statusData.extruder.temperature !== undefined
-            ? `${statusData.extruder.temperature}°C`
-            : prevData.extruder,
-        heaterBed:
-          statusData.heater_bed && statusData.heater_bed.temperature !== undefined
-            ? `${statusData.heater_bed.temperature}°C`
-            : prevData.heaterBed,
-        progress:
-          statusData.display_status && typeof statusData.display_status.progress !== "undefined"
-            ? statusData.display_status.progress
-            : prevData.progress,
-      }));
-      if (statusData.print_stats && typeof statusData.print_stats.state === "string") {
-        setLocalStatus(statusData.print_stats.state);
-      }
-      if (
-        statusData.toolhead &&
-        statusData.toolhead.estimated_print_time &&
-        statusData.print_stats.print_duration !== undefined &&
-        statusData.print_stats.state === "printing"
-      ) {
-        const est = statusData.toolhead.estimated_print_time;
-        const current = statusData.print_stats.print_duration;
-        const remaining = Math.max(0, est - current);
-        setEta(formatSecondsToHHMMSS(remaining));
-      }
-    }
-  }, []);
-
-  // Activate socket if not disconnected.
-  const activateSocket = localStatus && localStatus.toLowerCase() !== "disconnected";
-  usePrinterSocket(ipAddress, handleSocketData, activateSocket);
-
-  // Function to connect the printer.
-  const handleConnect = () => {
-    connectPrinter(ipAddress)
-      .then((data) => {
-        const newStatus = data.printer.status || "Connected";
-        setLocalStatus(newStatus);
-        if (data.initial_state && data.initial_state.result && data.initial_state.result.status) {
-          const statusData = data.initial_state.result.status;
-          const extruderTemp =
-            statusData.extruder && statusData.extruder.temperature !== undefined
-              ? `${statusData.extruder.temperature}°C`
-              : dynamicData.extruder;
-          const heaterBedTemp =
-            statusData.heater_bed && statusData.heater_bed.temperature !== undefined
-              ? `${statusData.heater_bed.temperature}°C`
-              : dynamicData.heaterBed;
-          setDynamicData((prevData) => ({
-            ...prevData,
-            extruder: extruderTemp,
-            heaterBed: heaterBedTemp,
-          }));
-          if (
-            statusData.toolhead &&
-            statusData.toolhead.estimated_print_time &&
-            statusData.toolhead.print_time !== undefined &&
-            statusData.print_stats.state === "printing"
-          ) {
-            const est = statusData.toolhead.estimated_print_time;
-            const current = statusData.toolhead.print_time;
-            const remaining = Math.max(0, est - current);
-            setEta(formatSecondsToHHMMSS(remaining));
-          }
-        }
-      })
-      .catch((err) => {
-        console.error("Error connecting to printer:", err);
-      });
+  // Helpers
+  const calcRemainingSeconds = (elapsed, progress) => {
+    if (progress <= 0) return null;
+    const totalTime = elapsed / progress;
+    return Math.max(0, totalTime - elapsed);
   };
 
-  // Render children as a function passing the dynamic state and connect function.
+  // Handle incoming socket data
+  const handleSocketData = useCallback(
+    (data) => {
+      const s = data?.result?.status;
+      if (!s) return;
+
+      // Temperatures
+      const extruderTemp =
+        s.extruder?.temperature != null && s.extruder.target != null
+          ? `${Math.round(s.extruder.temperature)}°C / ${Math.round(s.extruder.target)}°C`
+          : dynamicData.extruder;
+      const heaterBedTemp =
+        s.heater_bed?.temperature != null && s.heater_bed.target != null
+          ? `${Math.round(s.heater_bed.temperature)}°C / ${Math.round(s.heater_bed.target)}°C`
+          : dynamicData.heaterBed;
+      const chamberRaw = s["temperature_sensor chamber_temp"]?.temperature;
+      const chamberTemp =
+        chamberRaw != null ? `${Math.round(chamberRaw)}°C` : dynamicData.chamberTemp;
+
+      // File info
+      const filename = s.print_stats?.filename || dynamicData.filename;
+      const rawProgress = s.virtual_sdcard?.progress;
+      const progress =
+        rawProgress != null ? `${Math.round(rawProgress * 100)}%` : dynamicData.progress;
+
+      // Filament used (convert mm → m)
+      const filamentUsed =
+        s.print_stats?.filament_used != null
+          ? `${(s.print_stats.filament_used / 1000).toFixed(2)}m`
+          : dynamicData.filamentUsed;
+
+      // Layer info
+      const layer =
+        s.virtual_sdcard?.layer != null && s.virtual_sdcard.layer_count != null
+          ? `${s.virtual_sdcard.layer} / ${s.virtual_sdcard.layer_count}`
+          : dynamicData.layer;
+
+      // ETA + finish time
+      let newEta = eta;
+      let finishTime = dynamicData.finish;
+      if (
+        s.print_stats?.print_duration != null &&
+        rawProgress != null &&
+        s.print_stats.state === "printing"
+      ) {
+        const remainingSecs = calcRemainingSeconds(s.print_stats.print_duration, rawProgress);
+        if (remainingSecs != null) {
+          newEta = formatSecondsToHHMMSS(remainingSecs);
+          finishTime = new Date(Date.now() + remainingSecs * 1000).toLocaleTimeString();
+        }
+      }
+
+      // Update all dynamic fields at once
+      setDynamicData((prev) => ({
+        ...prev,
+        extruder: extruderTemp,
+        heaterBed: heaterBedTemp,
+        chamberTemp,
+        filename,
+        progress,
+        filamentUsed,
+        layer,
+        finish: finishTime,
+      }));
+
+      if (newEta != null) {
+        setEta(newEta);
+      }
+      if (s.print_stats?.state) {
+        setLocalStatus(s.print_stats.state);
+      }
+    },
+    [dynamicData, eta]
+  );
+
+  const activateSocket = localStatus?.toLowerCase() !== "disconnected";
+  usePrinterSocket(ipAddress, handleSocketData, activateSocket);
+
+  // On initial connect, seed dynamicData & ETA
+  const handleConnect = () => {
+    connectPrinter(ipAddress)
+      .then(({ printer, initial_state }) => {
+        setLocalStatus(printer.status || "connected");
+        const s = initial_state?.result?.status;
+        if (!s) return;
+
+        // (Repeat same logic as socket data for initial values)
+        const extruderTemp =
+          s.extruder?.temperature != null && s.extruder.target != null
+            ? `${Math.round(s.extruder.temperature)}°C / ${Math.round(s.extruder.target)}°C`
+            : dynamicData.extruder;
+        const heaterBedTemp =
+          s.heater_bed?.temperature != null && s.heater_bed.target != null
+            ? `${Math.round(s.heater_bed.temperature)}°C / ${Math.round(s.heater_bed.target)}°C`
+            : dynamicData.heaterBed;
+        const chamberRaw = s["temperature_sensor chamber_temp"]?.temperature;
+        const chamberTemp =
+          chamberRaw != null ? `${Math.round(chamberRaw)}°C` : dynamicData.chamberTemp;
+        const filename = s.print_stats?.filename || dynamicData.filename;
+        const rawProgress = s.virtual_sdcard?.progress;
+        const progress =
+          rawProgress != null ? `${Math.round(rawProgress * 100)}%` : dynamicData.progress;
+        const filamentUsed =
+          s.print_stats?.filament_used != null
+            ? `${(s.print_stats.filament_used / 1000).toFixed(2)} m`
+            : dynamicData.filamentUsed;
+        const layer =
+          s.virtual_sdcard?.layer != null && s.virtual_sdcard.layer_count != null
+            ? `${s.virtual_sdcard.layer} / ${s.virtual_sdcard.layer_count}`
+            : dynamicData.layer;
+
+        let newEta = eta;
+        let finishTime = dynamicData.finish;
+        if (
+          s.print_stats?.print_duration != null &&
+          rawProgress != null &&
+          s.print_stats.state === "printing"
+        ) {
+          const remainingSecs = calcRemainingSeconds(s.print_stats.print_duration, rawProgress);
+          if (remainingSecs != null) {
+            newEta = formatSecondsToHHMMSS(remainingSecs);
+            finishTime = new Date(Date.now() + remainingSecs * 1000).toLocaleTimeString();
+          }
+        }
+
+        setDynamicData((prev) => ({
+          ...prev,
+          extruder: extruderTemp,
+          heaterBed: heaterBedTemp,
+          chamberTemp,
+          filename,
+          progress,
+          filamentUsed,
+          layer,
+          finish: finishTime,
+        }));
+        if (newEta != null) setEta(newEta);
+      })
+      .catch((err) => console.error("Error connecting to printer:", err));
+  };
+
+  // Pass everything down to children renderer
   return children({ localStatus, dynamicData, eta, handleConnect });
 };
 
@@ -107,7 +176,11 @@ PrinterDynamicData.propTypes = {
     queued: PropTypes.string,
     extruder: PropTypes.string,
     heaterBed: PropTypes.string,
-  }),
+    chamberTemp: PropTypes.string,
+    filename: PropTypes.string,
+    filamentUsed: PropTypes.string,
+    layer: PropTypes.string,
+  }).isRequired,
   children: PropTypes.func.isRequired,
 };
 
@@ -119,6 +192,10 @@ PrinterDynamicData.defaultProps = {
     queued: "0",
     extruder: "N/A",
     heaterBed: "N/A",
+    chamberTemp: "N/A",
+    filename: "",
+    filamentUsed: "N/A",
+    layer: "N/A",
   },
 };
 

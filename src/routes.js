@@ -38,7 +38,7 @@ Coded by www.creative-tim.com
 // Material Dashboard 2 React layouts
 import Dashboard from "layouts/dashboard";
 import Printers from "pages/Printers";
-import PrintJobs from "pages/PrintJobs";
+import PrintSchedule from "pages/PrintSchedule";
 import Maintenance from "pages/Maintenance";
 import PrinterDetails from "pages/PrinterDetails";
 
@@ -71,7 +71,7 @@ const routes = [
     key: "print-jobs",
     icon: <ScheduleIcon />,
     route: "/print-jobs",
-    component: <PrintJobs />,
+    component: <PrintSchedule />,
   },
   {
     type: "collapse",

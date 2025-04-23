@@ -12,6 +12,8 @@ import {
   ToggleButton,
   ToggleButtonGroup,
   Button,
+  Switch,
+  FormControlLabel,
 } from "@mui/material";
 import MDBox from "components/MDBox";
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
@@ -22,10 +24,11 @@ import { fetchPrinters, connectPrinter } from "api/printer";
 const Printers = () => {
   const [printers, setPrinters] = useState([]);
   const [viewMode, setViewMode] = useState("grid");
+  const [showOffline, setShowOffline] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Initial fetch to load printers data.
+  // Initial fetch
   useEffect(() => {
     fetchPrinters()
       .then((data) => {
@@ -38,25 +41,25 @@ const Printers = () => {
       });
   }, []);
 
-  // Handler for "Connect All" button.
+  // Connect All handler
   const handleConnectAll = async () => {
     try {
-      // Initiate connection for each printer concurrently.
-      await Promise.all(printers.map((printer) => connectPrinter(printer.ip_address)));
-      // Re-fetch printers to update their statuses from the API.
-      const updatedPrinters = await fetchPrinters();
-      // Force re-render by setting a new array instance.
-      setPrinters([...updatedPrinters]);
-    } catch (error) {
-      console.error("Error connecting all printers:", error);
+      await Promise.all(printers.map((p) => connectPrinter(p.ip_address)));
+      const updated = await fetchPrinters();
+      setPrinters(updated);
+    } catch (err) {
+      console.error("Error connecting all printers:", err);
     }
   };
 
-  const handleViewChange = (event, nextView) => {
-    if (nextView !== null) {
-      setViewMode(nextView);
-    }
+  const handleViewChange = (e, next) => {
+    if (next) setViewMode(next);
   };
+
+  // Determine which printers to display
+  const displayedPrinters = showOffline
+    ? printers
+    : printers.filter((p) => p.status && p.status.toLowerCase() !== "offline");
 
   if (loading) {
     return (
@@ -67,7 +70,6 @@ const Printers = () => {
       </DashboardLayout>
     );
   }
-
   if (error) {
     return (
       <DashboardLayout>
@@ -82,13 +84,25 @@ const Printers = () => {
     <DashboardLayout>
       <DashboardNavbar />
       <MDBox py={3}>
-        {/* Connect All Button */}
+        {/* Connect All */}
         <MDBox display="flex" justifyContent="center" mb={2}>
           <Button variant="contained" color="info" onClick={handleConnectAll}>
             Connect All
           </Button>
         </MDBox>
-        <MDBox display="flex" justifyContent="flex-end" mb={2}>
+
+        {/* View & Filter toggles */}
+        <MDBox display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+          <FormControlLabel
+            control={
+              <Switch
+                checked={showOffline}
+                onChange={(e) => setShowOffline(e.target.checked)}
+                color="primary"
+              />
+            }
+            label="Show Offline"
+          />
           <ToggleButtonGroup
             value={viewMode}
             exclusive
@@ -103,10 +117,11 @@ const Printers = () => {
             </ToggleButton>
           </ToggleButtonGroup>
         </MDBox>
+
         {viewMode === "grid" ? (
           <Grid container spacing={3}>
-            {printers.map((printer, index) => (
-              <Grid item xs={12} sm={6} md={4} key={`${printer.printer_id}-${printer.status}`}>
+            {displayedPrinters.map((printer) => (
+              <Grid item xs={12} sm={6} md={4} key={printer.printer_id}>
                 <PrinterCard printer={printer} />
               </Grid>
             ))}
@@ -123,11 +138,11 @@ const Printers = () => {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {printers.map((printer, index) => (
-                  <TableRow key={`${printer.printer_id}-${printer.status}`}>
+                {displayedPrinters.map((printer) => (
+                  <TableRow key={printer.printer_id}>
                     <TableCell>{printer.printer_name || "N/A"}</TableCell>
                     <TableCell>{printer.printer_model || "N/A"}</TableCell>
-                    <TableCell>{printer.status || "Unknown"}</TableCell>
+                    <TableCell>{printer.status}</TableCell>
                     <TableCell>{printer.location || "Not specified"}</TableCell>
                   </TableRow>
                 ))}
