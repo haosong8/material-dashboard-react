@@ -1,7 +1,7 @@
 // src/pages/PrinterDetailsPage.jsx
 import React, { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
-import { Grid, Table, TableContainer, Paper, TableRow } from "@mui/material";
+import { Grid, Table, TableContainer, TableRow, Paper } from "@mui/material";
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import MDBox from "components/MDBox";
@@ -25,7 +25,7 @@ const PrinterDetailsPage = () => {
       .catch((err) => console.error("Error fetching printer details:", err));
   }, [ipAddress]);
 
-  if (!printer)
+  if (!printer) {
     return (
       <DashboardLayout>
         <DashboardNavbar />
@@ -34,6 +34,7 @@ const PrinterDetailsPage = () => {
         </MDBox>
       </DashboardLayout>
     );
+  }
 
   const {
     printer_name,
@@ -51,6 +52,15 @@ const PrinterDetailsPage = () => {
     prepare_time,
     supported_materials,
     heated_chamber,
+    progress,
+    finish,
+    queued,
+    extruder,
+    heaterBed,
+    chamberTemp,
+    filename,
+    filamentUsed,
+    layer,
   } = printer;
 
   const webcamUrl =
@@ -117,6 +127,9 @@ const PrinterDetailsPage = () => {
                   <strong>Supported Materials:</strong> {supported_materials?.join(", ") || "N/A"}
                 </li>
                 <li>
+                  <strong>Heated Chamber:</strong> {heated_chamber ? "Yes" : "No"}
+                </li>
+                <li>
                   <strong>Status:</strong> {capitalizeStatus(status)}
                 </li>
               </ul>
@@ -129,15 +142,15 @@ const PrinterDetailsPage = () => {
               ipAddress={ipAddress}
               initialStatus={status}
               initialDynamicData={{
-                progress: printer.progress || "0%",
-                finish: printer.finish || "N/A",
-                queued: printer.queued || "0",
-                extruder: printer.extruder || "N/A",
-                heaterBed: printer.heaterBed || "N/A",
-                chamberTemp: printer.chamberTemp || "N/A",
-                filename: printer.filename || "",
-                filamentUsed: printer.filamentUsed || "N/A",
-                layer: printer.layer || "N/A",
+                progress: progress || "0%",
+                finish: finish || "N/A",
+                queued: queued || "0",
+                extruder: extruder || "N/A",
+                heaterBed: heaterBed || "N/A",
+                chamberTemp: chamberTemp || "N/A",
+                filename: filename || "",
+                filamentUsed: filamentUsed || "N/A",
+                layer: layer || "N/A",
               }}
             >
               {({ localStatus, dynamicData, eta, handleConnect }) => {
@@ -147,8 +160,7 @@ const PrinterDetailsPage = () => {
                     <MDTypography variant="h6" gutterBottom>
                       Realtime Print Information
                     </MDTypography>
-                    <MDBox>
-                      {/* File being printed */}
+                    <MDBox mb={1}>
                       {dynamicData.filename && (
                         <MDTypography variant="body2">
                           <strong>File:</strong> {dynamicData.filename}
@@ -199,7 +211,6 @@ const PrinterDetailsPage = () => {
                         )}
                       </Grid>
                     </Grid>
-
                     <MDButton
                       variant="contained"
                       color="info"
@@ -228,40 +239,27 @@ const PrinterDetailsPage = () => {
               >
                 Refresh Gcodes
               </MDButton>
-
               {gcodes?.length > 0 ? (
                 <TableContainer sx={{ maxHeight: 400, minWidth: 650, overflow: "auto" }}>
                   <Table stickyHeader size="small" sx={{ tableLayout: "fixed" }}>
                     <thead>
                       <TableRow>
-                        <DataTableHeadCell width="40%" align="center">
-                          Filename
-                        </DataTableHeadCell>
-                        <DataTableHeadCell width="15%" align="center">
-                          Material
-                        </DataTableHeadCell>
-                        <DataTableHeadCell width="20%" align="center">
-                          Estimated Print Time
-                        </DataTableHeadCell>
-                        <DataTableHeadCell width="20%" align="center">
-                          Historical Print Time
-                        </DataTableHeadCell>
+                        <DataTableHeadCell align="center">Filename</DataTableHeadCell>
+                        <DataTableHeadCell align="center">Material</DataTableHeadCell>
+                        <DataTableHeadCell align="center">Estimated Print Time</DataTableHeadCell>
+                        <DataTableHeadCell align="center">Historical Print Time</DataTableHeadCell>
                       </TableRow>
                     </thead>
                     <tbody>
                       {gcodes.map((g) => (
                         <TableRow key={g.gcode_id}>
+                          <DataTableBodyCell align="center">{g.gcode_name}</DataTableBodyCell>
+                          <DataTableBodyCell align="center">{g.material}</DataTableBodyCell>
                           <DataTableBodyCell align="center">
-                            {g.gcode_name || "unknown"}
+                            {g.estimated_print_time}
                           </DataTableBodyCell>
                           <DataTableBodyCell align="center">
-                            {g.material || "unknown"}
-                          </DataTableBodyCell>
-                          <DataTableBodyCell align="center">
-                            {g.estimated_print_time || "N/A"}
-                          </DataTableBodyCell>
-                          <DataTableBodyCell align="center">
-                            {g.historical_print_time || "N/A"}
+                            {g.historical_print_time}
                           </DataTableBodyCell>
                         </TableRow>
                       ))}
