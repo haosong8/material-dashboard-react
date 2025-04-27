@@ -27,28 +27,35 @@ const Printers = () => {
   const [showOffline, setShowOffline] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [connectingAll, setConnectingAll] = useState(false);
 
-  // Initial fetch
+  // Load printers
+  const loadPrinters = async () => {
+    try {
+      const data = await fetchPrinters();
+      setPrinters(data);
+    } catch (err) {
+      setError(err.message || "Failed to fetch printers");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    fetchPrinters()
-      .then((data) => {
-        setPrinters(data);
-        setLoading(false);
-      })
-      .catch((err) => {
-        setError(err.message);
-        setLoading(false);
-      });
+    loadPrinters();
   }, []);
 
-  // Connect All handler
+  // Connect all printers, then reload
   const handleConnectAll = async () => {
+    setConnectingAll(true);
     try {
       await Promise.all(printers.map((p) => connectPrinter(p.ip_address)));
-      const updated = await fetchPrinters();
-      setPrinters(updated);
+      await loadPrinters();
     } catch (err) {
       console.error("Error connecting all printers:", err);
+      setError("Failed to connect all printers");
+    } finally {
+      setConnectingAll(false);
     }
   };
 
@@ -56,7 +63,6 @@ const Printers = () => {
     if (next) setViewMode(next);
   };
 
-  // Determine which printers to display
   const displayedPrinters = showOffline
     ? printers
     : printers.filter((p) => p.status && p.status.toLowerCase() !== "offline");
@@ -70,6 +76,7 @@ const Printers = () => {
       </DashboardLayout>
     );
   }
+
   if (error) {
     return (
       <DashboardLayout>
@@ -86,8 +93,13 @@ const Printers = () => {
       <MDBox py={3}>
         {/* Connect All */}
         <MDBox display="flex" justifyContent="center" mb={2}>
-          <Button variant="contained" color="info" onClick={handleConnectAll}>
-            Connect All
+          <Button
+            variant="contained"
+            color="info"
+            onClick={handleConnectAll}
+            disabled={connectingAll}
+          >
+            {connectingAll ? "Connecting..." : "Connect All"}
           </Button>
         </MDBox>
 

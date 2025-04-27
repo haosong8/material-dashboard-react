@@ -18,12 +18,34 @@ import DataTableBodyCell from "examples/Tables/DataTable/DataTableBodyCell";
 const PrinterDetailsPage = () => {
   const { ipAddress } = useParams();
   const [printer, setPrinter] = useState(null);
+  const [loadingGcodes, setLoadingGcodes] = useState(false);
+
+  // Fetch printer details on mount
+  const loadPrinter = async () => {
+    try {
+      const data = await getPrinterbyIP(ipAddress);
+      setPrinter(data);
+    } catch (err) {
+      console.error("Error fetching printer details:", err);
+    }
+  };
 
   useEffect(() => {
-    getPrinterbyIP(ipAddress)
-      .then(setPrinter)
-      .catch((err) => console.error("Error fetching printer details:", err));
+    loadPrinter();
   }, [ipAddress]);
+
+  // Handler to refresh Gcodes and update printer state
+  const handleRefresh = async () => {
+    setLoadingGcodes(true);
+    try {
+      await fetchGcodes(ipAddress);
+      await loadPrinter();
+    } catch (err) {
+      console.error("Error refreshing Gcodes:", err);
+    } finally {
+      setLoadingGcodes(false);
+    }
+  };
 
   if (!printer) {
     return (
@@ -204,9 +226,9 @@ const PrinterDetailsPage = () => {
                         <MDTypography variant="body2">
                           <strong>Heater Bed:</strong> {dynamicData.heaterBed}
                         </MDTypography>
-                        {heated_chamber && isPrinting && (
+                        {heated_chamber && dynamicData.chamberTemp && (
                           <MDTypography variant="body2">
-                            <strong>Chamber Temp:</strong> {dynamicData.chamberTemp}
+                            <strong>Chamber:</strong> {dynamicData.chamberTemp}
                           </MDTypography>
                         )}
                       </Grid>
@@ -234,10 +256,11 @@ const PrinterDetailsPage = () => {
               <MDButton
                 variant="contained"
                 color="primary"
-                onClick={() => fetchGcodes(ipAddress).catch((err) => console.error(err))}
+                onClick={handleRefresh}
+                disabled={loadingGcodes}
                 sx={{ mb: 2 }}
               >
-                Refresh Gcodes
+                {loadingGcodes ? "Refreshing..." : "Refresh Gcodes"}
               </MDButton>
               {gcodes?.length > 0 ? (
                 <TableContainer sx={{ maxHeight: 400, minWidth: 650, overflow: "auto" }}>

@@ -6,22 +6,16 @@ const RtcVideoFeed = ({ printerIp, signalingUrl }) => {
   const videoRef = useRef(null);
 
   useEffect(() => {
-    // Construct the signaling URL using the printerIp if no explicit signalingUrl was provided.
     const url = signalingUrl || (printerIp ? `http://${printerIp}:8000/call/webrtc_local` : null);
     if (!url) {
       console.error("No signaling URL or printer IP provided for RTC video feed");
       return;
     }
 
-    // Use a default RTCPeerConnection config on non-Android devices.
     const isAndroid = navigator.userAgent.toLowerCase().indexOf("android") > -1;
     const pc = isAndroid
       ? new RTCPeerConnection()
-      : new RTCPeerConnection({
-          iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
-        });
-
-    const log = (msg) => console.log(msg);
+      : new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
 
     const sendOfferToCall = (sdp) => {
       const xhr = new XMLHttpRequest();
@@ -31,7 +25,14 @@ const RtcVideoFeed = ({ printerIp, signalingUrl }) => {
             const res = JSON.parse(atob(xhr.responseText));
             console.log("Received answer:", res);
             if (res.type === "answer") {
-              pc.setRemoteDescription(new RTCSessionDescription(res));
+              // Guard against setting description on a closed connection
+              if (pc.signalingState !== "closed") {
+                pc.setRemoteDescription(new RTCSessionDescription(res)).catch((err) => {
+                  console.error("Error setting remote description:", err);
+                });
+              } else {
+                console.warn("Skipping setRemoteDescription: PeerConnection is closed");
+              }
             }
           } catch (e) {
             console.error("Error parsing response:", e);
@@ -54,7 +55,7 @@ const RtcVideoFeed = ({ printerIp, signalingUrl }) => {
     };
 
     pc.oniceconnectionstatechange = () => {
-      log("ICE connection state: " + pc.iceConnectionState);
+      console.log("ICE connection state: " + pc.iceConnectionState);
     };
 
     pc.onicecandidate = (event) => {
@@ -63,7 +64,6 @@ const RtcVideoFeed = ({ printerIp, signalingUrl }) => {
       }
     };
 
-    // Add a transceiver so the connection both sends and receives video.
     pc.addTransceiver("video", { direction: "sendrecv" });
 
     pc.createOffer()
