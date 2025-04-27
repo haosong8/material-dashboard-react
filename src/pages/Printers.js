@@ -45,20 +45,23 @@ const Printers = () => {
     loadPrinters();
   }, []);
 
-  // Connect all printers, then reload
   const handleConnectAll = async () => {
     setConnectingAll(true);
     try {
-      await Promise.all(printers.map((p) => connectPrinter(p.ip_address)));
+      await Promise.all(
+        printers.map(async (p) => {
+          try {
+            await connectPrinter(p.ip_address);
+          } catch (e) {
+            console.error(`Connect error for ${p.ip_address}:`, e);
+          }
+        })
+      );
       await loadPrinters();
-    } catch (err) {
-      console.error("Error connecting all printers:", err);
-      setError("Failed to connect all printers");
     } finally {
       setConnectingAll(false);
     }
   };
-
   const handleViewChange = (e, next) => {
     if (next) setViewMode(next);
   };
